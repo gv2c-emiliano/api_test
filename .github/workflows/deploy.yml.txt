@@ -1,0 +1,48 @@
+name: Build e Push para ECR
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:  # Permite rodar manualmente
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: minha-api
+
+jobs:
+  build-and-push:
+    name: Build e Push
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Checkout do código
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 2. Configurar credenciais AWS via OIDC
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::SUA_CONTA_AWS:role/GitHubActionsECRRole
+          aws-region: ${{ env.AWS_REGION }}
+
+      # 3. Login no ECR
+      - name: Login no Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # 4. Build, tag e push da imagem
+      - name: Build e Push
+        env:
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker tag $REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $REGISTRY/$ECR_REPOSITORY:latest
+          docker push $REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $REGISTRY/$ECR_REPOSITORY:latest
+          echo "Imagem publicada: $REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
